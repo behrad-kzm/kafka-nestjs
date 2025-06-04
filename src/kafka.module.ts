@@ -1,5 +1,5 @@
 import { Module, Global, DynamicModule, Provider } from '@nestjs/common';
-import { DiscoveryModule, ModulesContainer, MetadataScanner, Reflector } from '@nestjs/core';
+import { DiscoveryModule } from '@nestjs/core';
 import { KafkaDynamicListenerService } from './services/kafka-dynamic-listener.service';
 import {
   SharedKafkaAsyncConfiguration,
@@ -7,14 +7,30 @@ import {
 import { KAFKA_MODULE_OPTIONS } from './constants/kafka.constants';
 import { KafkaProducerService } from './services/kafka-producer.service';
 import { KafkaConfig } from 'kafkajs';
+import { KafkaCoreModule } from './kafka-core.module';
 
 @Global()
 @Module({})
 export class KafkaModule {
+  private static createProviders(options: KafkaConfig): Provider[] {
+    return [
+      {
+        provide: KAFKA_MODULE_OPTIONS,
+        useValue: options,
+      },
+      {
+        provide: 'KAFKA_PARTITIONER',
+        useValue: undefined,
+      },
+      KafkaDynamicListenerService,
+      KafkaProducerService,
+    ];
+  }
+
   static forProducer(): DynamicModule {
     return {
       module: KafkaModule,
-      imports: [DiscoveryModule],
+      imports: [DiscoveryModule, KafkaCoreModule],
       providers: [
         {
           provide: 'KAFKA_PARTITIONER',
@@ -29,22 +45,8 @@ export class KafkaModule {
   static forRoot(options: KafkaConfig): DynamicModule {
     return {
       module: KafkaModule,
-      imports: [DiscoveryModule],
-      providers: [
-        {
-          provide: KAFKA_MODULE_OPTIONS,
-          useValue: options,
-        },
-        {
-          provide: 'KAFKA_PARTITIONER',
-          useValue: undefined,
-        },
-        ModulesContainer,
-        MetadataScanner,
-        Reflector,
-        KafkaDynamicListenerService,
-        KafkaProducerService,
-      ],
+      imports: [DiscoveryModule, KafkaCoreModule],
+      providers: this.createProviders(options),
       exports: [KafkaProducerService],
     };
   }
@@ -61,16 +63,13 @@ export class KafkaModule {
 
     return {
       module: KafkaModule,
-      imports: [DiscoveryModule],
+      imports: [DiscoveryModule, KafkaCoreModule],
       providers: [
         asyncProvider,
         {
           provide: 'KAFKA_PARTITIONER',
           useValue: undefined,
         },
-        ModulesContainer,
-        MetadataScanner,
-        Reflector,
         KafkaDynamicListenerService,
         KafkaProducerService,
       ],
