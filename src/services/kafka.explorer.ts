@@ -31,43 +31,6 @@ export class KafkaExplorer
   ) {
     this.kafka = new Kafka(this.options);
   }
-
-  private async ensureTopicExists(topic: string): Promise<void> {
-    try {
-      const admin = this.kafka.admin();
-      await admin.connect();
-
-      const topics = await admin.listTopics();
-      if (!topics.includes(topic)) {
-        await admin.createTopics({
-          topics: [{
-            topic,
-            numPartitions: 1,
-            replicationFactor: 1,
-          }],
-        });
-      }
-
-      await admin.disconnect();
-    } catch (error) {
-      if (this.options.logLevel > logLevel.NOTHING) {
-        this.logger.error({
-          message: `Failed to ensure topic exists`,
-          info: {
-            topic,
-            error: {
-              message: error.message,
-              stack: error.stack,
-              name: error.name,
-              ...error
-            },
-          },
-        });
-      }
-      throw error;
-    }
-  }
-
   async onModuleInit() {
     await this.explore();
   }
@@ -81,7 +44,6 @@ export class KafkaExplorer
       return;
     }
 
-    const topicPromises: Promise<void>[] = [];
     const consumerPromises: Promise<void>[] = [];
 
     const providers: InstanceWrapper[] = this.discoveryService.getProviders()
@@ -111,13 +73,6 @@ export class KafkaExplorer
         const kafkaOptions = this.metadataAccessor.getConsumerOptionsMetadata(method);
         if (kafkaOptions) {
           try {
-            // Create topics in parallel
-            for (const topic of kafkaOptions.subscribe.topics) {
-              if (typeof topic === 'string') {
-                topicPromises.push(this.ensureTopicExists(topic));
-              }
-            }
-
             // Bind consumers in parallel
             consumerPromises.push(
               this.bindConsumer(
@@ -160,9 +115,6 @@ export class KafkaExplorer
         }
       });
     });
-
-    // Wait for all topics to be created
-    await Promise.all(topicPromises);
 
     // Wait for all consumers to be bound
     await Promise.all(consumerPromises);
@@ -224,6 +176,7 @@ export class KafkaExplorer
             message: `Failed to bind consumer`,
             info: {
               error: {
+                consumer: options.consumerConfig,
                 message: error.message,
                 stack: error.stack,
                 name: error.name,
